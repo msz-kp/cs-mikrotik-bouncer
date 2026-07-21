@@ -78,7 +78,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 
 	comment := fmt.Sprintf("CS:%s:%s", *decision.Origin, *decision.Scenario)
 
-	if data, ok :=  mal.cache[address]; ok {
+	if data, ok := mal.cache[address]; ok {
 		//update
 		mtDuration, err := time.ParseDuration(data.Duration)
 		if err != nil {
@@ -90,29 +90,17 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		}
 		diff := (mtDuration - csDuration).Abs()
 
-		if diff < time.Minute * 5  {
+		if diff < time.Minute*5 {
 			log.Debug().Msgf("%s skipped. same duration", address)
 			return
 		}
 
-		log.Debug().Msgf("Verify address %s in mikrotik", address)
-		checkCmd := fmt.Sprintf("/%s/firewall/address-list/print =.proplist=address,timeout ?list=BAN ?.id=%s", proto, data.ID)
-
-		r, err := mal.c.RunArgs(strings.Split(checkCmd, " "))
+		updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
+		_, err = mal.c.RunArgs(strings.Split(updateCmd, " "))
 		if err != nil {
-			log.Fatal().Err(err).Msgf("%s address-list search cmd failed", proto)
+			log.Error().Err(err).Msgf("%s address-list update cmd failed", proto)
 		}
-
-		if len(r.Re) == 1 && r.Re[0].Map["address"] == address {
-			updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
-			_, err = mal.c.RunArgs(strings.Split(updateCmd, " "))
-			if err != nil {
-				log.Error().Err(err).Msgf("%s address-list update cmd failed", proto)
-			}
-			log.Info().Msgf("%s updated in mikrotik", address)
-		} else {
-			log.Fatal().Msgf("%s not updated mikrotik", address)
-		}
+		log.Info().Msgf("%s updated in mikrotik", address)
 
 	} else {
 		// add
@@ -121,7 +109,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 
 		r, err := mal.c.RunArgs(strings.Split(addCmd, " "))
 		if err != nil {
-			log.Error().Err(err).Msgf("%s address-list add cmd failed", proto)
+			log.Error().Err(err).Msgf("%s address-list add cmd failed", address)
 		} else {
 			mal.cache[address] = mikrotikAddrListData{r.Done.List[0].Value, *decision.Duration} //msz
 			log.Info().Msgf("%s blocked in mikrotik", address)
@@ -150,28 +138,18 @@ func (mal *mikrotikAddrList) remove(decision *models.Decision) {
 		address = *decision.Value
 	}
 
-	if data, ok :=  mal.cache[address]; ok {
-		log.Debug().Msgf("Verify address %s in mikrotik", address)
-		checkCmd := fmt.Sprintf("/%s/firewall/address-list/print =.proplist=address ?list=BAN ?.id=%s", proto, data.ID)
-		r, err := mal.c.RunArgs(strings.Split(checkCmd, " "))
+	if data, ok := mal.cache[address]; ok {
+		delCmd := fmt.Sprintf("/%s/firewall/address-list/remove =numbers=%s", proto, data.ID)
+		_, err := mal.c.RunArgs(strings.Split(delCmd, " "))
 		if err != nil {
-			log.Fatal().Err(err).Msgf("%s address-list search cmd failed", proto)
-		}
-
-		if len(r.Re) == 1 && r.Re[0].Map["address"] == address {
-			delCmd := fmt.Sprintf("/%s/firewall/address-list/remove =numbers=%s", proto, data.ID)
-			_, err = mal.c.RunArgs(strings.Split(delCmd, " "))
-			if err != nil {
-				log.Error().Err(err).Msgf("%s address-list remove cmd failed", proto)
-			}
-			log.Info().Msgf("%s removed from mikrotik", address)
+			log.Error().Err(err).Msgf("%s address-list remove cmd failed", address)
 		} else {
-			log.Debug().Msgf("%s already removed from mikrotik", address)
+			log.Info().Msgf("%s removed from mikrotik", address)
 		}
-		delete(mal.cache, address)
 
+		delete(mal.cache, address)
 	} else {
-		log.Debug().Msgf("%s not find in local cache", address)
+		log.Warn().Msgf("%s not found in local cache. remove failed", address)
 	}
 }
 
