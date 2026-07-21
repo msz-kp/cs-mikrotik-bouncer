@@ -2,25 +2,36 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/go-routeros/routeros/v3"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-
 	"golang.org/x/sync/errgroup"
 
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 )
 
+type mikrotikAddrListData struct {
+	ID  string
+	Duration string
+}
+
+
 type mikrotikAddrList struct {
 	c     *routeros.Client
-	cache map[string]string
+	cache map[string]mikrotikAddrListData
 }
 
 func main() {
+	flag.Parse()
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime})
 
-	// zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	initConfig()
+	initLog()
 
 	bouncer := &csbouncer.StreamBouncer{
 		APIKey:         crowdsecBouncerAPIKey,
@@ -45,7 +56,7 @@ func main() {
 	})
 
 	g.Go(func() error {
-		log.Printf("Processing new and deleted decisions . . .")
+		log.Info().Msg("Processing new and deleted decisions . . .")
 		for {
 			select {
 			case <-ctx.Done():

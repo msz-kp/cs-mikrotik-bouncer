@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/spf13/viper"
@@ -9,6 +8,10 @@ import (
 
 var (
 	logLevel              string
+	logFile               string
+	logMaxSize            int
+	logMaxBackups         int
+	logMaxAge             int
 	crowdsecBouncerAPIKey string
 	crowdsecBouncerURL    string
 	mikrotikHost          string
@@ -21,11 +24,28 @@ var (
 )
 
 func initConfig() {
+	viper.SetConfigName("crowdsec-mikrotik-bouncer")
+	viper.AddConfigPath("/etc/crowdsec/bouncers")
+	viper.AddConfigPath(".")
+	viper.SetConfigType("yaml")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Fatal().Err(err).Msg("ReadInConfig failed")
+	}
+
 	viper.BindEnv("log_level")
-	viper.SetDefault("log_level", "1")
+	viper.SetDefault("log_level", 1)
+	viper.BindEnv("log_file")
+	viper.BindEnv("log_max_size")
+	viper.SetDefault("log_max_size", 1)
+	viper.BindEnv("log_max_backups")
+	viper.SetDefault("log_max_backups", 4)
+	viper.BindEnv("log_max_age")
+	viper.SetDefault("log_max_age", 30)
 	viper.BindEnv("crowdsec_bouncer_api_key")
 	viper.BindEnv("crowdsec_url")
-	viper.SetDefault("crowdsec_url", "http://crowdsec:8080/")
+	viper.SetDefault("crowdsec_url", "http://127.0.0.1:8080/")
 	viper.BindEnv("mikrotik_host")
 	viper.BindEnv("mikrotik_user")
 	viper.BindEnv("mikrotik_pass")
@@ -37,11 +57,10 @@ func initConfig() {
 	viper.SetDefault("crowdsec_origins", nil)
 
 	logLevel = viper.GetString("log_level")
-	level, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		log.Fatal().Err(err).Msg("invalid log level")
-	}
-	zerolog.SetGlobalLevel(level)
+	logFile = viper.GetString("log_file")
+	logMaxSize = viper.GetInt("log_max_size")
+	logMaxBackups = viper.GetInt("log_max_backups")
+	logMaxAge = viper.GetInt("log_max_age")
 
 	crowdsecBouncerAPIKey = viper.GetString("crowdsec_bouncer_api_key")
 	if crowdsecBouncerAPIKey == "" {
@@ -71,6 +90,7 @@ func initConfig() {
 
 	all := viper.AllSettings()
 	delete(all, "mikrotik_pass")
+	delete(all, "crowdsec_bouncer_api_key")
 
 	log.Printf("Using config: %+v", all)
 }
