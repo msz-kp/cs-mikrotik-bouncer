@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-routeros/routeros/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
@@ -15,16 +14,7 @@ import (
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 )
 
-type mikrotikAddrListData struct {
-	ID  string
-	Duration string
-}
 
-
-type mikrotikAddrList struct {
-	c     *routeros.Client
-	cache map[string]mikrotikAddrListData
-}
 
 func main() {
 	flag.Parse()

@@ -6,12 +6,45 @@ import (
 	"time"
 
 	"github.com/crowdsecurity/crowdsec/pkg/models"
-	"github.com/rs/zerolog/log"
-
 	"github.com/go-routeros/routeros/v3"
+	"github.com/rs/zerolog/log"
 )
 
 const updateDurationTolerance = 1 * time.Minute
+
+type mikrotikAddrListData struct {
+	ID  string
+	TimeOut time.Duration
+	TimeCreated time.Time
+}
+
+func (data *mikrotikAddrListData) Timeout() time.Duration {
+        diff := time.Since(data.TimeCreated)
+	return data.TimeOut - diff
+}
+
+func (data *mikrotikAddrListData) ShouldSkipAddDecision(duration string) (bool, error)   {
+		csDuration, err := time.ParseDuration(duration)
+		if err != nil {
+			return false, err
+		}
+		diff := (data.TimeOut - csDuration).Abs()
+
+		return diff < updateDurationTolerance, nil
+}
+
+func NewMikrotikAddrListData(id string, duration string) *mikrotikAddrListData {
+	data := new(mikrotikAddrListData)
+	data.ID = id
+	data.TimeOut, _ = time.ParseDuration(duration) // 0 on err
+
+	return data
+}
+
+type mikrotikAddrList struct {
+	c     *routeros.Client
+	cache map[string]*mikrotikAddrListData
+}
 
 func dial() (*routeros.Client, error) {
 	if useTLS {
@@ -34,7 +67,7 @@ func (mal *mikrotikAddrList) initMikrotik() {
 
 	mal.c = c
 
-	mal.cache = make(map[string]mikrotikAddrListData)
+	mal.cache = make(map[string]*mikrotikAddrListData)
 
 	protos := []string{"ip"}
 
@@ -50,7 +83,7 @@ func (mal *mikrotikAddrList) initMikrotik() {
 		}
 		log.Info().Str("protocol", proto).Str("list", mikrotikList).Msgf("fill %d entry in internal addrList", len(r.Re))
 		for _, v := range r.Re {
-			mal.cache[v.Map["address"]] = mikrotikAddrListData{v.Map[".id"], v.Map["timeout"]}
+			mal.cache[v.Map["address"]] = NewMikrotikAddrListData(v.Map[".id"], v.Map["timeout"])
 		}
 	}
 }
@@ -87,25 +120,16 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 
 	if data, ok := mal.cache[address]; ok {
 		//update
-		mtDuration, err := time.ParseDuration(data.Duration)
-		if err != nil {
-			log.Fatal().Err(err).Str("address", address).Msg("time parse error(data.Duration)")
-		}
-		csDuration, err := time.ParseDuration(*decision.Duration)
-		if err != nil {
-			log.Fatal().Err(err).Str("address", address).Msg("time parse error(decision.Duration)")
-		}
-		diff := (mtDuration - csDuration).Abs()
-
-		if diff < updateDurationTolerance {
-			log.Debug().Str("protocol", proto).Str("address", address).
-				Str("duration_mt", data.Duration).Str("duration_local", *decision.Duration).
-				Msg("skipped. same duration")
+		skipAdd, _ := data.ShouldSkipAddDecision(*decision.Duration) //ignore err, update/add
+		if  skipAdd {
+			log.Debug().Str("protocol", proto).Str("address", address).Msg("skipped. same duration")
 			return
 		}
 
+
+
 		updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
-		_, err = mal.c.RunArgs(strings.Split(updateCmd, " "))
+		_, err := mal.c.RunArgs(strings.Split(updateCmd, " "))
 		if err != nil {
 			log.Error().Str("protocol", proto).Str("address", address).Str("id", data.ID).Str("comment", comment).Err(err).Msg("address-list update cmd failed")
 		} else {
@@ -119,7 +143,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		if err != nil {
 			log.Error().Err(err).Str("protocol", proto).Str("address", address).Msg("address-list add cmd failed")
 		} else {
-			mal.cache[address] = mikrotikAddrListData{r.Done.List[0].Value, *decision.Duration} //msz
+			mal.cache[address] = NewMikrotikAddrListData(r.Done.List[0].Value, *decision.Duration)
 			log.Info().Str("protocol", proto).Str("address", address).Msg("blocked in mikrotik")
 		}
 	}
@@ -160,8 +184,7 @@ func (mal *mikrotikAddrList) remove(decision *models.Decision) {
 		} else {
 			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Msg("removed from mikrotik")
 		}
-
-		delete(mal.cache, address)
+		delete(mal.cache, address) // del also on err
 	} else {
 		log.Warn().Str("protocol", proto).Str("address", address).Msg("not found in local cache. remove failed")
 	}
