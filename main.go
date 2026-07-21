@@ -56,7 +56,7 @@ func main() {
 	})
 
 	g.Go(func() error {
-		log.Info().Msg("Processing new and deleted decisions . . .")
+		log.Info().Msg("Processing new and deleted decisions ...")
 		for {
 			select {
 			case <-ctx.Done():

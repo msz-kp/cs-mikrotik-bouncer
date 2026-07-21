@@ -19,11 +19,11 @@ func dial() (*routeros.Client, error) {
 }
 
 func (mal *mikrotikAddrList) initMikrotik() {
-	log.Info().Msg("Connecting to mikrotik")
+	log.Info().Msg("connecting to mikrotik")
 
 	c, err := dial()
 	if err != nil {
-		log.Fatal().Err(err).Str("host", mikrotikHost).Str("username", username).Bool("useTLS", useTLS).Msg("Connection failed")
+		log.Fatal().Err(err).Str("host", mikrotikHost).Str("username", username).Bool("useTLS", useTLS).Msg("connection failed")
 	}
 
 	if async {
@@ -41,13 +41,12 @@ func (mal *mikrotikAddrList) initMikrotik() {
 	}
 
 	for _, proto := range protos {
-		log.Info().Msgf("mikrotik %s list addr", proto)
 		initCmd := fmt.Sprintf("/%s/firewall/address-list/print ?list=BAN =.proplist=.id,address,timeout", proto)
 		r, err := c.RunArgs(strings.Split(initCmd, " "))
 		if err != nil {
-			log.Fatal().Err(err).Msg("address-list print failed")
+			log.Fatal().Str("protocol", proto).Err(err).Msg("address-list print failed")
 		}
-		log.Info().Msgf("fill %d entry in internal %s addrList", len(r.Re), proto)
+		log.Info().Str("protocol", proto).Msgf("fill %d entry in internal addrList", len(r.Re))
 		for _, v := range r.Re {
 			mal.cache[v.Map["address"]] = mikrotikAddrListData{v.Map[".id"], v.Map["timeout"]}
 		}
@@ -55,12 +54,18 @@ func (mal *mikrotikAddrList) initMikrotik() {
 }
 
 func (mal *mikrotikAddrList) add(decision *models.Decision) {
-	log.Debug().Msgf("new decisions from %s: IP: %s | Scenario: %s | Duration: %s | Scope : %v", *decision.Origin, *decision.Value, *decision.Scenario, *decision.Duration, *decision.Scope)
+	log.Debug().
+		Str("origin", *decision.Origin).
+		Str("value", *decision.Value).
+		Str("scenario", *decision.Scenario).
+		Str("duration", *decision.Duration).
+		Str("scope", *decision.Scope).
+		Msg("new decision")
 
 	var proto string
 	if strings.Contains(*decision.Value, ":") {
 		if !useIPV6 {
-			log.Debug().Msgf("Ignore adding address %s (IPv6 disabled)", *decision.Value)
+			log.Debug().Str("address", *decision.Value).Msg("ignore adding address. IPv6 disabled")
 			return
 		}
 		proto = "ipv6"
@@ -82,25 +87,28 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		//update
 		mtDuration, err := time.ParseDuration(data.Duration)
 		if err != nil {
-			log.Fatal().Err(err).Msgf("time parse error")
+			log.Fatal().Err(err).Str("address", address).Msg("time parse error(data.Duration)")
 		}
 		csDuration, err := time.ParseDuration(*decision.Duration)
 		if err != nil {
-			log.Fatal().Err(err).Msgf("time parse error")
+			log.Fatal().Err(err).Str("address", address).Msg("time parse error(decision.Duration)")
 		}
 		diff := (mtDuration - csDuration).Abs()
 
 		if diff < time.Minute*5 {
-			log.Debug().Msgf("%s skipped. same duration", address)
+			log.Debug().Str("protocol", proto).Str("address", address).
+				Str("duration_mt", data.Duration).Str("duration_local", *decision.Duration).
+				Msg("skipped. same duration")
 			return
 		}
 
 		updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
 		_, err = mal.c.RunArgs(strings.Split(updateCmd, " "))
 		if err != nil {
-			log.Error().Err(err).Msgf("%s address-list update cmd failed", proto)
+			log.Error().Str("protocol", proto).Str("address", address).Str("id", data.ID).Err(err).Msg("address-list update cmd failed")
+		} else {
+			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Msg("updated in mikrotik")
 		}
-		log.Info().Msgf("%s updated in mikrotik", address)
 
 	} else {
 		// add
@@ -109,20 +117,26 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 
 		r, err := mal.c.RunArgs(strings.Split(addCmd, " "))
 		if err != nil {
-			log.Error().Err(err).Msgf("%s address-list add cmd failed", address)
+			log.Error().Err(err).Str("protocol", proto).Str("address", address).Msg("address-list add cmd failed")
 		} else {
 			mal.cache[address] = mikrotikAddrListData{r.Done.List[0].Value, *decision.Duration} //msz
-			log.Info().Msgf("%s blocked in mikrotik", address)
+			log.Info().Str("protocol", proto).Str("address", address).Msg("blocked in mikrotik")
 		}
 	}
 }
 
 func (mal *mikrotikAddrList) remove(decision *models.Decision) {
-	log.Debug().Msgf("removed decisions: IP: %s | Scenario: %s | Duration: %s | Scope : %v", *decision.Value, *decision.Scenario, *decision.Duration, *decision.Scope)
+	log.Debug().
+		Str("origin", *decision.Origin).
+		Str("value", *decision.Value).
+		Str("scenario", *decision.Scenario).
+		Str("duration", *decision.Duration).
+		Str("scope", *decision.Scope).
+		Msg("removed decision")
 
 	var proto string
 	if strings.Contains(*decision.Value, ":") {
-		log.Debug().Msgf("Ignore removing address %s (IPv6 disabled)", *decision.Value)
+		log.Debug().Str("address", *decision.Value).Msg("ignore adding address. IPv6 disabled")
 		if !useIPV6 {
 			return
 		}
@@ -142,14 +156,14 @@ func (mal *mikrotikAddrList) remove(decision *models.Decision) {
 		delCmd := fmt.Sprintf("/%s/firewall/address-list/remove =numbers=%s", proto, data.ID)
 		_, err := mal.c.RunArgs(strings.Split(delCmd, " "))
 		if err != nil {
-			log.Error().Err(err).Msgf("%s address-list remove cmd failed", address)
+			log.Error().Err(err).Str("protocol", proto).Str("address", address).Str("id", data.ID).Msg("address-list remove cmd failed")
 		} else {
-			log.Info().Msgf("%s removed from mikrotik", address)
+			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Msg("removed from mikrotik")
 		}
 
 		delete(mal.cache, address)
 	} else {
-		log.Warn().Msgf("%s not found in local cache. remove failed", address)
+		log.Warn().Str("protocol", proto).Str("address", address).Msg("not found in local cache. remove failed")
 	}
 }
 
