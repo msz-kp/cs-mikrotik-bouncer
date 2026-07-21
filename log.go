@@ -43,4 +43,10 @@ func initLog() {
 	if len(writers) > 0 {
 		log.Logger = log.Output(zerolog.MultiLevelWriter(writers...))
 	}
+
+        hostname, _ := os.Hostname()
+	log.Logger = log.With().
+		Str("hostname", hostname).
+		Int("pid", os.Getpid()).
+		Logger()
 }

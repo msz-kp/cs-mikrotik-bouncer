@@ -107,14 +107,12 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
 		_, err = mal.c.RunArgs(strings.Split(updateCmd, " "))
 		if err != nil {
-			log.Error().Str("protocol", proto).Str("address", address).Str("id", data.ID).Err(err).Msg("address-list update cmd failed")
+			log.Error().Str("protocol", proto).Str("address", address).Str("id", data.ID).Str("comment", comment).Err(err).Msg("address-list update cmd failed")
 		} else {
-			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Msg("updated in mikrotik")
+			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Str("comment", comment).Msg("updated in mikrotik")
 		}
-
 	} else {
 		// add
-
 		addCmd := fmt.Sprintf("/%s/firewall/address-list/add =list=%s =address=%s =comment=%s =timeout=%s", proto, mikrotikList, address, comment, *decision.Duration)
 
 		r, err := mal.c.RunArgs(strings.Split(addCmd, " "))
@@ -170,7 +168,6 @@ func (mal *mikrotikAddrList) remove(decision *models.Decision) {
 }
 
 func (mal *mikrotikAddrList) decisionProcess(streamDecision *models.DecisionsStreamResponse) {
-
 	for _, decision := range streamDecision.Deleted {
 		mal.remove(decision)
 	}
