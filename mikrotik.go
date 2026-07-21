@@ -41,12 +41,12 @@ func (mal *mikrotikAddrList) initMikrotik() {
 	}
 
 	for _, proto := range protos {
-		initCmd := fmt.Sprintf("/%s/firewall/address-list/print ?list=BAN =.proplist=.id,address,timeout", proto)
+		initCmd := fmt.Sprintf("/%s/firewall/address-list/print ?list=%s =.proplist=.id,address,timeout", proto, mikrotikList)
 		r, err := c.RunArgs(strings.Split(initCmd, " "))
 		if err != nil {
-			log.Fatal().Str("protocol", proto).Err(err).Msg("address-list print failed")
+			log.Fatal().Str("protocol", proto).Str("list", mikrotikList).Err(err).Msg("address-list print failed")
 		}
-		log.Info().Str("protocol", proto).Msgf("fill %d entry in internal addrList", len(r.Re))
+		log.Info().Str("protocol", proto).Str("list", mikrotikList).Msgf("fill %d entry in internal addrList", len(r.Re))
 		for _, v := range r.Re {
 			mal.cache[v.Map["address"]] = mikrotikAddrListData{v.Map[".id"], v.Map["timeout"]}
 		}
@@ -113,7 +113,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 	} else {
 		// add
 
-		addCmd := fmt.Sprintf("/%s/firewall/address-list/add =list=BAN =address=%s =comment=%s =timeout=%s", proto, address, comment, *decision.Duration)
+		addCmd := fmt.Sprintf("/%s/firewall/address-list/add =list=%s =address=%s =comment=%s =timeout=%s", proto, mikrotikList, address, comment, *decision.Duration)
 
 		r, err := mal.c.RunArgs(strings.Split(addCmd, " "))
 		if err != nil {

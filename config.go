@@ -15,6 +15,7 @@ var (
 	crowdsecBouncerAPIKey string
 	crowdsecBouncerURL    string
 	mikrotikHost          string
+	mikrotikList          string
 	username              string
 	password              string
 	async                 bool
@@ -46,6 +47,8 @@ func initConfig() {
 	viper.BindEnv("crowdsec_bouncer_api_key")
 	viper.BindEnv("crowdsec_url")
 	viper.SetDefault("crowdsec_url", "http://127.0.0.1:8080/")
+	viper.BindEnv("mikrotik_list")
+	viper.SetDefault("mikrotik_list", "crowdsec")
 	viper.BindEnv("mikrotik_host")
 	viper.BindEnv("mikrotik_user")
 	viper.BindEnv("mikrotik_pass")
@@ -73,8 +76,8 @@ func initConfig() {
 
 	crowdsecOrigins = viper.GetStringSlice("crowdsec_origins")
 
+	mikrotikList = viper.GetString("mikrotik_list")
 	mikrotikHost = viper.GetString("mikrotik_host")
-
 	username = viper.GetString("mikrotik_user")
 	if username == "" {
 		log.Fatal().Msg("Mikrotik username is not set")
