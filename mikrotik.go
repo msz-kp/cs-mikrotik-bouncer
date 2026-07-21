@@ -11,6 +11,8 @@ import (
 	"github.com/go-routeros/routeros/v3"
 )
 
+const updateDurationTolerance = 1 * time.Minute
+
 func dial() (*routeros.Client, error) {
 	if useTLS {
 		return routeros.DialTLS(mikrotikHost, username, password, nil)
@@ -95,7 +97,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		}
 		diff := (mtDuration - csDuration).Abs()
 
-		if diff < time.Minute*5 {
+		if diff < updateDurationTolerance {
 			log.Debug().Str("protocol", proto).Str("address", address).
 				Str("duration_mt", data.Duration).Str("duration_local", *decision.Duration).
 				Msg("skipped. same duration")
