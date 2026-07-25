@@ -18,7 +18,7 @@ type mikrotikAddrListData struct {
 	TimeCreated time.Time
 }
 
-func (data *mikrotikAddrListData) Timeout() time.Duration {
+func (data *mikrotikAddrListData) TimeoutWithDiff() time.Duration {
         diff := time.Since(data.TimeCreated)
 	return data.TimeOut - diff
 }
@@ -28,7 +28,7 @@ func (data *mikrotikAddrListData) ShouldSkipAddDecision(duration string) (bool, 
 		if err != nil {
 			return false, err
 		}
-		diff := (data.TimeOut - csDuration).Abs()
+		diff := (data.TimeoutWithDiff() - csDuration).Abs()
 
 		return diff < updateDurationTolerance, nil
 }
@@ -37,6 +37,7 @@ func NewMikrotikAddrListData(id string, duration string) *mikrotikAddrListData {
 	data := new(mikrotikAddrListData)
 	data.ID = id
 	data.TimeOut, _ = time.ParseDuration(duration) // 0 on err
+        data.TimeCreated = time.Now()
 
 	return data
 }
@@ -126,13 +127,12 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 			return
 		}
 
-
-
 		updateCmd := fmt.Sprintf("/%s/firewall/address-list/set =numbers=%s =comment=%s =timeout=%s", proto, data.ID, comment, *decision.Duration)
 		_, err := mal.c.RunArgs(strings.Split(updateCmd, " "))
 		if err != nil {
 			log.Error().Str("protocol", proto).Str("address", address).Str("id", data.ID).Str("comment", comment).Err(err).Msg("address-list update cmd failed")
 		} else {
+			data.TimeCreated = time.Now()
 			log.Info().Str("protocol", proto).Str("address", address).Str("id", data.ID).Str("comment", comment).Msg("updated in mikrotik")
 		}
 	} else {
