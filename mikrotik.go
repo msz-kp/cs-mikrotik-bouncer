@@ -25,7 +25,7 @@ func (data *mikrotikAddrListData) TimeoutWithDiff() time.Duration {
 }
 
 func (data *mikrotikAddrListData) ShouldSkipAddDecision(duration string) (bool, error)   {
-		csDuration, err := time.ParseDuration(duration)
+		csDuration, err := cstime.ParseDurationWithDays(duration)
 		if err != nil {
 			return false, err
 		}
