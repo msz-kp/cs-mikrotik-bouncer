@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	"github.com/crowdsecurity/go-cs-lib/cstime"
 	"github.com/go-routeros/routeros/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -34,9 +35,15 @@ func (data *mikrotikAddrListData) ShouldSkipAddDecision(duration string) (bool, 
 }
 
 func NewMikrotikAddrListData(id string, duration string) *mikrotikAddrListData {
+	var err error
+
 	data := new(mikrotikAddrListData)
 	data.ID = id
-	data.TimeOut, _ = time.ParseDuration(duration) // 0 on err
+	data.TimeOut, err = cstime.ParseDurationWithDays(duration) // 0 on err
+	if err != nil {
+		log.Warn().Str("id", id).Str("duration", duration).Msg("failed to parse duration") // like weeks on mt..
+
+	}
         data.TimeCreated = time.Now()
 
 	return data
@@ -123,7 +130,7 @@ func (mal *mikrotikAddrList) add(decision *models.Decision) {
 		//update
 		skipAdd, _ := data.ShouldSkipAddDecision(*decision.Duration) //ignore err, update/add
 		if  skipAdd {
-			log.Debug().Str("protocol", proto).Str("address", address).Msg("skipped. same duration")
+			log.Debug().Str("protocol", proto).Str("address", address).Msg("add skipped. same duration")
 			return
 		}
 
@@ -177,6 +184,12 @@ func (mal *mikrotikAddrList) remove(decision *models.Decision) {
 	}
 
 	if data, ok := mal.cache[address]; ok {
+		if data.TimeoutWithDiff() <= 0 {
+			log.Debug().Str("protocol", proto).Str("address", address).Msg("remove skipped. expired")
+			delete(mal.cache, address)
+			return
+		}
+
 		delCmd := fmt.Sprintf("/%s/firewall/address-list/remove =numbers=%s", proto, data.ID)
 		_, err := mal.c.RunArgs(strings.Split(delCmd, " "))
 		if err != nil {
