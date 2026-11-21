@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"fortio.org/duration"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/go-cs-lib/cstime"
 	"github.com/go-routeros/routeros/v3"
@@ -34,14 +35,14 @@ func (data *mikrotikAddrListData) ShouldSkipAddDecision(duration string) (bool, 
 		return diff < updateDurationTolerance, nil
 }
 
-func NewMikrotikAddrListData(id string, duration string) *mikrotikAddrListData {
+func NewMikrotikAddrListData(id string, durationStr string) *mikrotikAddrListData {
 	var err error
 
 	data := new(mikrotikAddrListData)
 	data.ID = id
-	data.TimeOut, err = cstime.ParseDurationWithDays(duration) // 0 on err
+	data.TimeOut, err = duration.Parse(durationStr) // 0 on err
 	if err != nil {
-		log.Warn().Str("id", id).Str("duration", duration).Msg("failed to parse duration") // like weeks on mt..
+		log.Warn().Str("id", id).Str("duration", durationStr).Msg("failed to parse duration") // like weeks on mt..
 
 	}
         data.TimeCreated = time.Now()
